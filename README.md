@@ -39,15 +39,25 @@ Made by **Zenato**.
 - Unlock every product range *(host)*.
 - Fill every shelf row that already holds a product, for free *(host)*.
 - Open the store, close it right away *(host)*, end the day.
+- Free boxes: search any product and drop 1 to 10 full boxes in front of you.
+
+**Management**
+- Buy store and storage expansions one at a time, or every expansion and department at once, for free.
+- Unlock every franchise perk without spending points.
+- Pay every bill and pay off your loan for free.
+- Set every selling price at once: market price, ×1.5 or ×2 (the most customers will pay).
+- Rename the store and change the sign colour *(host)*.
 
 **Customers and staff** *(host)*
 - Custom limit on how many customers can be in the store at once.
 - No thieves.
 - Send every customer out.
 - Faster employees, near-instant checkout and restocking.
+- Custom hiring limit, and new candidates on the hiring board without using up rerolls.
 
 **World** *(host)*
 - Set the time, freeze it, or speed it up and slow it down.
+- Pick today's weather: sunny, windy, cloudy, rain, storm or snow.
 - No trash, no breakdowns, pick up all trash at once.
 
 **Players**
@@ -99,7 +109,7 @@ powershell -ExecutionPolicy Bypass -File install.ps1 -GameDir "D:\SteamLibrary\s
 After starting the game once, open `BepInEx\LogOutput.log` in the game folder. It should contain:
 
 ```
-[Info   :Supermarket Trainer] Supermarket Trainer 1.0.0 by Zenato loaded. Menu key: Insert
+[Info   :Supermarket Trainer] Supermarket Trainer 1.1.0 by Zenato loaded. Menu key: Insert
 ```
 
 ## Usage
@@ -125,7 +135,9 @@ Supermarket Together runs the store simulation on the host's machine. Options th
 simulation (customers, employees, clock, trash, shelves, franchise) only work when **you host the
 game**. When you join someone else's game they are greyed out with a *host* badge.
 
-Your own movement, teleports, money top-ups, event tokens and broom skins work in any game.
+Your own movement, teleports, money top-ups, free boxes, expansions, perks, bills, prices, event
+tokens and broom skins work in any game. Free purchases put the exact price in the till right
+before the game's own purchase takes it back, so the till ends where it started.
 
 Please be considerate when you join other people's games.
 
@@ -165,6 +177,11 @@ straight from its install folder; if your game is elsewhere, pass
 `.tools\bepinex\pkg\BepInEx\core`, which `install.ps1` downloads.
 
 `package.ps1` builds both release zips into `build\release\`.
+
+`dotnet build -c Release -p:SelfTest=true` builds an automated in-game check instead
+(`src/SelfTest.cs`). It hosts a local game on the save slot `StoreFile9.es3`, which you copy
+from one of your saves beforehand, exercises the features, writes screenshots and a report to
+`BepInEx\selftest\`, then quits without saving. Back up your saves before running it.
 
 Project layout:
 
@@ -223,9 +240,10 @@ la langue se choisit aussi dans Réglages.
 
 - **Joueur** : noclip, vitesse, saut, gravité, saut infini, champ de vision.
 - **Téléportation** : au viseur, au point d'apparition, 5 emplacements sauvegardés.
-- **Magasin** : argent, argent infini, franchise, déblocage des gammes, remplissage des rayons, ouverture et fin de journée.
-- **Clients et employés** : limite de clients, aucun voleur, employés rapides, encaissement éclair.
-- **Monde** : heure, heure figée, vitesse du temps, aucun déchet, aucune panne.
+- **Magasin** : argent, argent infini, franchise, déblocage des gammes, remplissage des rayons, ouverture et fin de journée, cartons gratuits de n'importe quel produit.
+- **Gestion** : agrandissements et départements gratuits, tous les avantages de franchise sans points, factures et prêt payés gratuitement, tous les prix d'un coup (prix du marché, ×1,5 ou ×2), nom et couleur de l'enseigne.
+- **Clients et employés** : limite de clients, aucun voleur, employés rapides, encaissement éclair, limite d'embauche, nouveaux candidats sans relance.
+- **Monde** : heure, heure figée, vitesse du temps, météo du jour, aucun déchet, aucune panne.
 - **Joueurs** : liste, téléportation, noms à travers les murs, prison, expulsion, repérage des voleurs.
 - **Balais** : jetons d'événement, boules gachapon gratuites, déblocage de tous les skins de balai.
 

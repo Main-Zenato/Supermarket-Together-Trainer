@@ -15,6 +15,8 @@
     <GameDir Condition="'$(GameDir)' == ''">C:\Program Files (x86)\Steam\steamapps\common\Supermarket Together</GameDir>
     <ManagedDir>$(GameDir)\Supermarket Together_Data\Managed</ManagedDir>
     <BepInExCore>$(MSBuildThisFileDirectory).tools\bepinex\pkg\BepInEx\core</BepInExCore>
+    <!-- dotnet build -p:SelfTest=true compiles the automated in-game check (src/SelfTest.cs). -->
+    <DefineConstants Condition="'$(SelfTest)' == 'true'">$(DefineConstants);SELFTEST</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
@@ -45,6 +47,7 @@
     <Reference Include="UnityEngine.TextRenderingModule" HintPath="$(ManagedDir)\UnityEngine.TextRenderingModule.dll" />
     <Reference Include="UnityEngine.PhysicsModule" HintPath="$(ManagedDir)\UnityEngine.PhysicsModule.dll" />
     <Reference Include="UnityEngine.AIModule" HintPath="$(ManagedDir)\UnityEngine.AIModule.dll" />
+    <Reference Include="UnityEngine.ScreenCaptureModule" HintPath="$(ManagedDir)\UnityEngine.ScreenCaptureModule.dll" />
   </ItemGroup>
 
 </Project>

@@ -37,12 +37,14 @@ namespace SupermarketTrainer
                 "Noclip, speed, jumping and camera. Only affects your own character.", PlayerMods.Draw);
             Add("Téléportation", "Teleport", "Va là où tu vises, ou enregistre tes endroits favoris.",
                 "Go where you aim, or save your favourite spots.", Teleport.Draw);
-            Add("Magasin", "Store", "Argent, franchise, rayons et déroulement de la journée.",
-                "Money, franchise, shelves and the flow of the day.", Store.Draw);
-            Add("Clients et employés", "Customers & staff", "Fréquentation, voleurs et rendement du personnel.",
-                "Foot traffic, thieves and staff performance.", Staff.Draw);
-            Add("Monde", "World", "Horloge du magasin, déchets et pannes.",
-                "Store clock, trash and breakdowns.", World.Draw);
+            Add("Magasin", "Store", "Argent, franchise, rayons, journée et cartons gratuits.",
+                "Money, franchise, shelves, the day and free boxes.", Store.Draw);
+            Add("Gestion", "Management", "Agrandissements, avantages, factures, prix et enseigne.",
+                "Expansions, perks, bills, prices and the store sign.", Management.Draw);
+            Add("Clients et employés", "Customers & staff", "Fréquentation, voleurs, rendement et embauche du personnel.",
+                "Foot traffic, thieves, staff performance and hiring.", Staff.Draw);
+            Add("Monde", "World", "Horloge du magasin, météo, déchets et pannes.",
+                "Store clock, weather, trash and breakdowns.", World.Draw);
             Add("Joueurs", "Players", "Les personnes présentes dans ta partie.",
                 "The people in your game.", Players.Draw);
             Add("Balais", "Brooms", "Jetons d'événement, boules gachapon et skins de balai.",
@@ -53,6 +55,17 @@ namespace SupermarketTrainer
 
         private static void Add(string titleFr, string titleEn, string subFr, string subEn, Action<Ui> draw) =>
             Tabs.Add(new Tab { TitleFr = titleFr, TitleEn = titleEn, SubtitleFr = subFr, SubtitleEn = subEn, Draw = draw });
+
+        internal static int TabCount => Tabs.Count;
+
+        /// <summary>Shows a tab scrolled to <paramref name="scroll"/> pixels, without animation.</summary>
+        internal static void Select(int tab, float scroll = 0f)
+        {
+            _tab = Mathf.Clamp(tab, 0, Tabs.Count - 1);
+            Tabs[_tab].ScrollTarget = scroll;
+            Anim.Snap("menu.scroll" + _tab, scroll);
+            Anim.Snap("menu.fade", 1f);
+        }
 
         public static void Toggle()
         {
@@ -240,7 +253,7 @@ namespace SupermarketTrainer
             Ui.Width = area.width - 14;
             Ui.Clip = new Rect(0, 0, area.width, area.height);
             Ui.Interactive = IsOpen;
-            Ui.Y = -scroll + (1f - fade) * 10f;
+            Ui.Y = Ui.Top = -scroll + (1f - fade) * 10f;
             tab.Draw(Ui);
             float contentH = Ui.Y + scroll - (1f - fade) * 10f + 12;
             GUI.color = prev;

@@ -96,6 +96,85 @@ namespace SupermarketTrainer.Features
             Toasts.Show(L.T("Toutes les gammes de produits sont débloquées.", "Every product range is unlocked."));
         }
 
+        // ---- Free boxes --------------------------------------------------------------------
+
+        private static string _boxSearch = "";
+        private static int _boxesPerClick = 1;
+        private const int BoxListLimit = 10;
+
+        internal static string ProductName(int id)
+        {
+            var lm = LocalizationManager.instance;
+            string name = lm ? lm.GetLocalizationString("product" + id) : null;
+            return string.IsNullOrEmpty(name) || name == "LocError" ? "#" + id : name;
+        }
+
+        /// <summary>
+        /// Drops full boxes in a grid in front of the player through the same command the game
+        /// uses when you put a box down, so it works for everyone and costs nothing.
+        /// </summary>
+        internal static void SpawnBoxes(int productId, int boxes)
+        {
+            var pl = ProductListing.Instance;
+            var player = Game.Player;
+            if (!player || !pl || productId < 0 || productId >= pl.productsData.Length) return;
+            var mb = GameData.Instance.GetComponent<ManagerBlackboard>();
+            var fwd = player.forward; fwd.y = 0f; fwd = fwd.sqrMagnitude > 0.01f ? fwd.normalized : Vector3.forward;
+            var right = Vector3.Cross(Vector3.up, fwd);
+            var origin = player.position + fwd * 1.8f + Vector3.up * 0.6f;
+            int perBox = pl.productsData[productId].maxItemsPerBox;
+            for (int i = 0; i < boxes; i++)
+            {
+                int col = i % 5, layer = i / 5;
+                mb.CmdSpawnBoxFromPlayer(origin + right * ((col - 2) * 0.75f) + Vector3.up * (layer * 0.75f), productId, perBox, player.eulerAngles.y);
+            }
+        }
+
+        private static void DrawBoxes(Ui ui, bool inGame)
+        {
+            ui.Section(L.T("Cartons gratuits", "Free boxes"));
+            var pl = ProductListing.Instance;
+            if (!inGame || !pl)
+            {
+                ui.Note(L.T("Lance une partie pour faire apparaître des cartons.", "Start a game to spawn boxes."));
+                return;
+            }
+            _boxSearch = ui.TextField("box.search", L.T("Rechercher un produit", "Search for a product"), _boxSearch, 240);
+            _boxesPerClick = ui.Stepper("box.count", L.T("Cartons par clic", "Boxes per click"), null, _boxesPerClick, 1, 10);
+
+            string q = (_boxSearch ?? "").Trim().ToLowerInvariant();
+            int shown = 0, matches = 0;
+            // Unlocked products first, as on the ordering computer; a search also covers the locked ones.
+            var ids = q.Length == 0 && pl.availableProducts.Count > 0 ? (System.Collections.Generic.IEnumerable<int>)pl.availableProducts : AllIds(pl);
+            foreach (int id in ids)
+            {
+                if (id < 0 || id >= pl.productsData.Length || pl.productsData[id] == null) continue;
+                var p = pl.productsData[id];
+                string name = ProductName(id);
+                if (q.Length > 0 && !name.ToLowerInvariant().Contains(q) && !(p.productBrand ?? "").ToLowerInvariant().Contains(q)) continue;
+                matches++;
+                if (shown >= BoxListLimit) continue;
+                shown++;
+                string caption = (string.IsNullOrEmpty(p.productBrand) ? "" : p.productBrand + ", ")
+                    + L.T($"{p.maxItemsPerBox} par carton", $"{p.maxItemsPerBox} per box");
+                if (ui.ListRow("box.row" + id, name, caption, false,
+                        new Btn(_boxesPerClick == 1 ? L.T("Poser", "Drop") : L.T($"Poser {_boxesPerClick}", $"Drop {_boxesPerClick}"), ButtonKind.Primary)) == 0)
+                {
+                    SpawnBoxes(id, _boxesPerClick);
+                    Toasts.Show(_boxesPerClick == 1 ? L.T($"Un carton de {name} devant toi.", $"A box of {name} in front of you.")
+                        : L.T($"{_boxesPerClick} cartons de {name} devant toi.", $"{_boxesPerClick} boxes of {name} in front of you."));
+                }
+            }
+            if (matches == 0) ui.Note(L.T("Aucun produit ne correspond à ta recherche.", "No product matches your search."));
+            else if (matches > shown)
+                ui.Note(L.T($"{matches - shown} autre(s) produit(s) : affine ta recherche.", $"{matches - shown} more product(s): narrow your search."));
+        }
+
+        private static System.Collections.Generic.IEnumerable<int> AllIds(ProductListing pl)
+        {
+            for (int i = 0; i < pl.productsData.Length; i++) yield return i;
+        }
+
         public static void Draw(Ui ui)
         {
             bool inGame = Game.InGame;
@@ -171,6 +250,8 @@ namespace SupermarketTrainer.Features
                     else { gd.CmdEndDayFromButton(); Toasts.Show(L.T("Fin de journée lancée.", "Ending the day.")); }
                 }
             }
+
+            DrawBoxes(ui, inGame);
         }
     }
 }

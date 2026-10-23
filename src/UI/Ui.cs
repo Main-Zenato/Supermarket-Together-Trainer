@@ -22,6 +22,7 @@ namespace SupermarketTrainer.UI
         public static string HostOnlyMessage => L.T("Réservé à l'hôte de la partie.", "Only the host can do this.");
 
         public float Y;
+        public float Top;            // Y of the tab's first row, scroll included
         public float Width;
         public Rect Clip;            // visible region, in group coordinates
         public bool Interactive;     // false while the window is animating closed
@@ -50,7 +51,8 @@ namespace SupermarketTrainer.UI
 
         public void Section(string title)
         {
-            Y += Y > 0 ? 18 : 2;
+            // Compared with where the tab starts, not with 0: once scrolled, Y is negative.
+            Y += Y > Top + 0.5f ? 18 : 2;
             var r = new Rect(0, Y, Width, 22);
             if (Visible(r)) Theme.Label(r, title, 13, Theme.Price, true);
             Y += 26;

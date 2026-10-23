@@ -14,11 +14,15 @@ namespace SupermarketTrainer.Features
         public static bool FastEmployees;
         public static float EmployeeSpeedMult = 2f;
         public static bool InstantCheckout;
+        public static bool HireCap;
+        public static float HireCapValue = 20f;
 
         private static int _savedCap = -1;
         private static float _savedCheckoutWait = -1f, _savedPlaceWait = -1f;
         private static bool _fastApplied;
         private static float _appliedMult;
+        private static int _savedMaxEmployees = -1, _appliedMaxEmployees;
+        private static NPC_Manager _hireNpc;
 
         public static void Tick()
         {
@@ -60,6 +64,20 @@ namespace SupermarketTrainer.Features
                 _savedCheckoutWait = -1f;
             }
 
+            if (npc != _hireNpc) { _hireNpc = npc; _savedMaxEmployees = -1; } // new session: nothing to restore
+            if (HireCap)
+            {
+                if (_savedMaxEmployees < 0) _savedMaxEmployees = npc.maxEmployees;
+                // A perk bought meanwhile adds to the value we wrote: carry it over to the original.
+                else if (npc.maxEmployees != _appliedMaxEmployees) _savedMaxEmployees += npc.maxEmployees - _appliedMaxEmployees;
+                npc.maxEmployees = _appliedMaxEmployees = Mathf.Min((int)HireCapValue, MaxHireSlots(npc));
+            }
+            else if (_savedMaxEmployees >= 0)
+            {
+                npc.maxEmployees = _savedMaxEmployees + (npc.maxEmployees - _appliedMaxEmployees);
+                _savedMaxEmployees = -1;
+            }
+
             if (FastEmployees != _fastApplied || (FastEmployees && !Mathf.Approximately(_appliedMult, EmployeeSpeedMult)))
             {
                 _fastApplied = FastEmployees;
@@ -70,7 +88,19 @@ namespace SupermarketTrainer.Features
 
         public static void Reset()
         {
-            CustomerCap = false; NoThieves = false; FastEmployees = false; InstantCheckout = false;
+            CustomerCap = false; NoThieves = false; FastEmployees = false; InstantCheckout = false; HireCap = false;
+        }
+
+        /// <summary>Hired employees are stored in a fixed-size array: no limit can go past it.</summary>
+        internal static int MaxHireSlots(NPC_Manager npc) => npc.hiredEmployeesData != null ? npc.hiredEmployeesData.Length : 0;
+
+        /// <summary>New candidates on the hiring board, through the game's reroll with one extra reroll granted.</summary>
+        internal static void NewCandidates()
+        {
+            var npc = NPC_Manager.Instance;
+            npc.NetworkrerollTimes = npc.rerollTimes + 1;
+            npc.CmdRerollCall();
+            Toasts.Show(L.T("Nouveaux candidats sur le tableau d'embauche.", "New candidates on the hiring board."));
         }
 
         private static void RemoveCustomers()
@@ -102,6 +132,20 @@ namespace SupermarketTrainer.Features
             InstantCheckout = ui.Toggle("emp.checkout", L.T("Encaissement et rangement éclair", "Lightning checkout and restocking"),
                 L.T("Les caissiers scannent et les employés posent les produits presque instantanément.",
                     "Cashiers scan and employees shelve products almost instantly."), InstantCheckout, lk);
+
+            ui.Section(L.T("Embauche", "Hiring"));
+            var npc = NPC_Manager.Instance;
+            int slots = npc ? MaxHireSlots(npc) : 0;
+            if (Game.InGame && npc)
+                ui.Stat(L.T("Employés embauchés", "Hired employees"), $"{npc.numberOfHiredEmployees} / {npc.maxEmployees}");
+            HireCap = ui.Toggle("emp.hirecap", L.T("Limite d'embauche personnalisée", "Custom hiring limit"),
+                L.T("Embauche plus d'employés que tes avantages ne le permettent.", "Hire more employees than your perks allow."), HireCap, lk);
+            HireCapValue = ui.Slider("emp.hirecapValue", L.T("Employés au maximum", "Maximum employees"), HireCapValue, 1f,
+                Mathf.Max(1f, slots > 0 ? slots : 30f), v => v.ToString("0"), lk, 1f);
+            if (ui.Buttons("emp.reroll", lk, new Btn(L.T("Nouveaux candidats", "New candidates"), ButtonKind.Primary)) == 0 && host && Game.InGame)
+                NewCandidates();
+            ui.Note(L.T("Remplace les candidats du jour sur l'ordinateur d'embauche, sans utiliser tes relances.",
+                "Replaces today's candidates on the hiring computer without using up your rerolls."));
         }
 
         internal static void ScaleEmployees(NPC_Manager npc)

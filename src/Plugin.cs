@@ -11,7 +11,7 @@ namespace SupermarketTrainer
     public sealed class Plugin : BaseUnityPlugin
     {
         public const string Guid = "zen.supermarkettogether.trainer";
-        public const string Version = "1.0.0";
+        public const string Version = "1.1.0";
 
         private Harmony _harmony;
 
@@ -23,6 +23,9 @@ namespace SupermarketTrainer
             _harmony = new Harmony(Guid);
             _harmony.PatchAll(typeof(Plugin).Assembly);
             Logger.LogInfo($"Supermarket Trainer {Version} by Zenato loaded. Menu key: {Settings.MenuKey.Value}");
+#if SELFTEST
+            SelfTest.Start(gameObject, Logger);
+#endif
         }
 
         private void OnDestroy()

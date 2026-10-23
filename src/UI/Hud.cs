@@ -44,6 +44,7 @@ namespace SupermarketTrainer.UI
             if (Staff.NoThieves) Active.Add(L.T("aucun voleur", "no thieves"));
             if (Staff.FastEmployees) Active.Add(L.T("employés ×", "staff ×") + Staff.EmployeeSpeedMult.ToString("0.0"));
             if (Staff.InstantCheckout) Active.Add(L.T("encaissement éclair", "lightning checkout"));
+            if (Staff.HireCap) Active.Add(Staff.HireCapValue.ToString("0") + L.T(" employés max", " employees max"));
         }
     }
 }

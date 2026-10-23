@@ -36,6 +36,25 @@ namespace SupermarketTrainer.Features
                 : L.T("Le magasin est déjà propre.", "The store is already clean."));
         }
 
+        // Same order as the game's weather icons (GameData.weatherSymbols).
+        private static readonly string[] WeatherFr = { "Soleil", "Vent", "Nuageux", "Pluie", "Orage", "Neige" };
+        private static readonly string[] WeatherEn = { "Sunny", "Windy", "Cloudy", "Rain", "Storm", "Snow" };
+
+        internal static string WeatherName(int i) =>
+            i >= 0 && i < WeatherFr.Length ? L.T(WeatherFr[i], WeatherEn[i]) : "#" + i;
+
+        /// <summary>Same steps as the host's daily roll, minus the dice: sync the index, then show it everywhere.</summary>
+        internal static void SetWeather(int index)
+        {
+            var gd = GameData.Instance;
+            // The RPC also re-reads the day's temperatures, which only exist once the day has started.
+            if (gd.weatherRelatedOBJs == null || index >= gd.weatherRelatedOBJs.Length || string.IsNullOrEmpty(gd.todayTemperatureData)) return;
+            gd.NetworkweatherIndex = index;
+            NPC_Manager.Instance.badWeatherDay = index >= 4;
+            Traverse.Create(gd).Method("RpcSetWeather", index, gd.todayTemperatureData ?? "").GetValue();
+            Toasts.Show(L.T("Météo du jour : ", "Today's weather: ") + WeatherName(index).ToLowerInvariant() + ".");
+        }
+
         public static void Draw(Ui ui)
         {
             bool host = Game.IsHost, lk = !host, inGame = Game.InGame;
@@ -65,6 +84,16 @@ namespace SupermarketTrainer.Features
                 FrozenAt = t;
                 Toasts.Show(L.T($"Il est maintenant {Clock(t)}.", $"It is now {Clock(t)}."));
             }
+
+            ui.Section(L.T("Météo", "Weather"));
+            if (inGame) ui.Stat(L.T("Aujourd'hui", "Today"), WeatherName(gd.weatherIndex));
+            for (int row = 0; row < 2; row++)
+            {
+                int w = ui.Buttons("world.weather" + row, lk, WeatherName(row * 3), WeatherName(row * 3 + 1), WeatherName(row * 3 + 2));
+                if (w >= 0 && inGame && host) SetWeather(row * 3 + w);
+            }
+            ui.Note(L.T("Change la météo du jour pour tout le monde. Par temps d'orage ou de neige, il y a moins de clients.",
+                "Changes today's weather for everyone. Storms and snow bring fewer customers."));
 
             ui.Section(L.T("Entretien", "Upkeep"));
             NoTrash = ui.Toggle("world.notrash", L.T("Aucun déchet", "No trash"),

@@ -37,7 +37,8 @@ namespace SupermarketTrainer.UI
             Text.Clear();
             _field = null;
 
-            Font = Font.CreateDynamicFontFromOSFont(new[] { "Bahnschrift", "Segoe UI", "Arial" }, 14);
+            // Bahnschrift is a variable font and Unity squeezes its glyphs together; Segoe UI renders cleanly.
+            Font = Font.CreateDynamicFontFromOSFont(new[] { "Segoe UI", "Arial" }, 14);
             White = NewTex(2, 2);
             White.SetPixels(new[] { Color.white, Color.white, Color.white, Color.white });
             White.Apply();
