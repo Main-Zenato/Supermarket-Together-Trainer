@@ -154,12 +154,20 @@ namespace SupermarketTrainer
             yield return Settle();
             Check("+1 store expansion", Owned(um.storeSpaceUpgrades) == store0 + 1, $"{store0} -> {Owned(um.storeSpaceUpgrades)}");
             Check("expansion was free", Mathf.Abs(gd.gameFunds - funds) <= 1f, $"{funds} -> {gd.gameFunds}");
+            // Some saves hold more slots than the map has; buying those dropped every client out of the game.
+            int stores = Management.Slots(um, 0, um.storeSpaceUpgrades), storages = Management.Slots(um, 1, um.storageSpaceUpgrades);
+            var bigStore = um.storeSpaceUpgrades; System.Array.Resize(ref bigStore, stores + 5); um.storeSpaceUpgrades = bigStore;
+            var bigStorage = um.storageSpaceUpgrades; System.Array.Resize(ref bigStorage, storages + 5); um.storageSpaceUpgrades = bigStorage;
+            var bigAddons = um.addonsBought; System.Array.Resize(ref bigAddons, bigAddons.Length + 5); um.addonsBought = bigAddons;
             Management.BuyExpansions(true, true, true);
             yield return new WaitForSecondsRealtime(1.5f);
-            int deps = Mathf.Min(um.addonsBought.Length, um.spaceAcquisitionComponent.departmentsCosts.Length);
-            Check("every store expansion", Owned(um.storeSpaceUpgrades) == um.storeSpaceUpgrades.Length, $"{Owned(um.storeSpaceUpgrades)}/{um.storeSpaceUpgrades.Length}");
-            Check("every storage expansion", Owned(um.storageSpaceUpgrades) == um.storageSpaceUpgrades.Length, $"{Owned(um.storageSpaceUpgrades)}/{um.storageSpaceUpgrades.Length}");
-            Check("every department", um.addonsBought.Take(deps).All(b => b), $"{Owned(um.addonsBought)}/{deps}");
+            int deps = Management.Departments(um);
+            Check("every store expansion", um.storeSpaceUpgrades.Take(stores).All(b => b), $"{Owned(um.storeSpaceUpgrades)}/{stores}");
+            Check("every storage expansion", um.storageSpaceUpgrades.Take(storages).All(b => b), $"{Owned(um.storageSpaceUpgrades)}/{storages}");
+            Check("every department", deps > 0 && um.addonsBought.Take(deps).All(b => b), $"{Owned(um.addonsBought)}/{deps}");
+            Check("slots missing from the map left alone", !um.storeSpaceUpgrades.Skip(stores).Any(b => b) && !um.storageSpaceUpgrades.Skip(storages).Any(b => b)
+                && !um.addonsBought.Skip(deps).Any(b => b), $"store {stores}/{um.storeSpaceUpgrades.Length}, storage {storages}/{um.storageSpaceUpgrades.Length}, departments {deps}/{um.addonsBought.Length}");
+            Check("still connected after buying everything", Mirror.NetworkClient.isConnected && Mirror.NetworkServer.active);
             Check("all expansions were free", Mathf.Abs(gd.gameFunds - funds) <= 25f, $"{funds} -> {gd.gameFunds}");
             Game.Teleport(Game.Player.position + Vector3.up * 0.2f);
             yield return Shot("31_expansions");

@@ -37,6 +37,29 @@ namespace SupermarketTrainer.Features
             return n;
         }
 
+        private static int Count(bool[] values, int slots)
+        {
+            int n = 0;
+            for (int i = 0; i < slots; i++) if (values[i]) n++;
+            return n;
+        }
+
+        /// <summary>
+        /// Expansions that really exist in the map. A save can hold more slots than the map has;
+        /// the host accepts those, but every client then fails to show them and drops out of the game.
+        /// </summary>
+        internal static int Slots(UpgradesManager um, int group, bool[] values)
+        {
+            if (values == null) return 0;
+            int n = values.Length;
+            foreach (var parent in new[] { um.expansionsParentOBJ, um.expansionsUIParentOBJ, um.expansionsUIButtonsParentOBJ })
+            {
+                if (!parent || parent.transform.childCount <= group) return 0;
+                n = Mathf.Min(n, parent.transform.GetChild(group).childCount);
+            }
+            return n;
+        }
+
         // ---- Expansions --------------------------------------------------------------------
 
         /// <summary>Buys every missing store and storage expansion, then every department.</summary>
@@ -48,8 +71,8 @@ namespace SupermarketTrainer.Features
             // Prices rise with each purchase, exactly as the host computes them (UpgradesManager.CmdAddSpace).
             if (store && um.storeSpaceUpgrades != null)
             {
-                int owned = Count(um.storeSpaceUpgrades);
-                for (int i = 0; i < um.storeSpaceUpgrades.Length && bought < limit; i++)
+                int owned = Count(um.storeSpaceUpgrades), slots = Slots(um, 0, um.storeSpaceUpgrades);
+                for (int i = 0; i < slots && bought < limit; i++)
                 {
                     if (um.storeSpaceUpgrades[i]) continue;
                     Fund(250 + owned++ * 250);
@@ -59,8 +82,8 @@ namespace SupermarketTrainer.Features
             }
             if (storage && um.storageSpaceUpgrades != null)
             {
-                int owned = Count(um.storageSpaceUpgrades);
-                for (int i = 0; i < um.storageSpaceUpgrades.Length && bought < limit; i++)
+                int owned = Count(um.storageSpaceUpgrades), slots = Slots(um, 1, um.storageSpaceUpgrades);
+                for (int i = 0; i < slots && bought < limit; i++)
                 {
                     if (um.storageSpaceUpgrades[i]) continue;
                     Fund(2000 + owned++ * 1000);
@@ -68,13 +91,13 @@ namespace SupermarketTrainer.Features
                     bought++;
                 }
             }
-            var costs = um.spaceAcquisitionComponent ? um.spaceAcquisitionComponent.departmentsCosts : null;
-            if (departments && costs != null && um.addonsBought != null)
+            if (departments)
             {
-                for (int i = 0; i < um.addonsBought.Length && i < costs.Length && bought < limit; i++)
+                int slots = Departments(um);
+                for (int i = 0; i < slots && bought < limit; i++)
                 {
                     if (um.addonsBought[i]) continue;
-                    Fund(costs[i]);
+                    Fund(um.spaceAcquisitionComponent.departmentsCosts[i]);
                     um.CmdAddAddon(i);
                     bought++;
                 }
@@ -82,8 +105,12 @@ namespace SupermarketTrainer.Features
             return bought;
         }
 
-        private static int Departments(UpgradesManager um) =>
-            um.spaceAcquisitionComponent ? Mathf.Min(um.addonsBought.Length, um.spaceAcquisitionComponent.departmentsCosts.Length) : 0;
+        internal static int Departments(UpgradesManager um)
+        {
+            if (!um.spaceAcquisitionComponent || um.spaceAcquisitionComponent.departmentsCosts == null || !um.addonsDepartmentsParentOBJ) return 0;
+            return Mathf.Min(Slots(um, 2, um.addonsBought), um.spaceAcquisitionComponent.departmentsCosts.Length,
+                um.addonsDepartmentsParentOBJ.transform.childCount);
+        }
 
         // ---- Perks -------------------------------------------------------------------------
 
@@ -188,8 +215,9 @@ namespace SupermarketTrainer.Features
             }
 
             ui.Section(L.T("Agrandissements", "Expansions"));
-            ui.Stat(L.T("Magasin", "Store"), $"{Count(um.storeSpaceUpgrades)} / {um.storeSpaceUpgrades.Length}");
-            ui.Stat(L.T("Entrepôt", "Storage"), $"{Count(um.storageSpaceUpgrades)} / {um.storageSpaceUpgrades.Length}");
+            int stores = Slots(um, 0, um.storeSpaceUpgrades), storages = Slots(um, 1, um.storageSpaceUpgrades);
+            ui.Stat(L.T("Magasin", "Store"), $"{Count(um.storeSpaceUpgrades, stores)} / {stores}");
+            ui.Stat(L.T("Entrepôt", "Storage"), $"{Count(um.storageSpaceUpgrades, storages)} / {storages}");
             int deps = Departments(um), depsOwned = 0;
             for (int i = 0; i < deps; i++) if (um.addonsBought[i]) depsOwned++;
             ui.Stat(L.T("Départements", "Departments"), $"{depsOwned} / {deps}");

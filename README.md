@@ -109,7 +109,7 @@ powershell -ExecutionPolicy Bypass -File install.ps1 -GameDir "D:\SteamLibrary\s
 After starting the game once, open `BepInEx\LogOutput.log` in the game folder. It should contain:
 
 ```
-[Info   :Supermarket Trainer] Supermarket Trainer 1.1.0 by Zenato loaded. Menu key: Insert
+[Info   :Supermarket Trainer] Supermarket Trainer 1.1.1 by Zenato loaded. Menu key: Insert
 ```
 
 ## Usage

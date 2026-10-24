@@ -11,7 +11,7 @@ namespace SupermarketTrainer
     public sealed class Plugin : BaseUnityPlugin
     {
         public const string Guid = "zen.supermarkettogether.trainer";
-        public const string Version = "1.1.0";
+        public const string Version = "1.1.1";
 
         private Harmony _harmony;
 
