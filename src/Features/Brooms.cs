@@ -14,7 +14,7 @@ namespace SupermarketTrainer.Features
         private static readonly string[] TokenFr = { "étoile", "lune", "alien", "bonbon", "flocon", "œuf" };
         private static readonly string[] TokenEn = { "star", "moon", "alien", "candy", "snowflake", "egg" };
 
-        private static string TokenName(int i) => L.T(TokenFr[i], TokenEn[i]);
+        internal static string TokenName(int i) => i < TokenFr.Length ? L.T(TokenFr[i], TokenEn[i]) : "#" + i;
 
         private static void GiveTokens(AchievementsManager am, int index, int amount)
         {

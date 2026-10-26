@@ -11,7 +11,7 @@ namespace SupermarketTrainer
     public sealed class Plugin : BaseUnityPlugin
     {
         public const string Guid = "zen.supermarkettogether.trainer";
-        public const string Version = "1.1.1";
+        public const string Version = "1.2.0";
 
         private Harmony _harmony;
 
@@ -65,6 +65,8 @@ namespace SupermarketTrainer
             PlayerMods.Tick();
             Store.Tick();
             Staff.Tick();
+            Players.Tick();
+            Management.Tick();
         }
 
         private void LateUpdate()

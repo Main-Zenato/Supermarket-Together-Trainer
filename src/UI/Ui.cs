@@ -287,20 +287,26 @@ namespace SupermarketTrainer.UI
         /// A list row with a title, a caption and right-aligned compact buttons. The first
         /// button is always available; <paramref name="lockExtras"/> locks the others.
         /// </summary>
-        public int ListRow(string id, string title, string caption, bool lockExtras, params Btn[] buttons)
+        public int ListRow(string id, string title, string caption, bool lockExtras, params Btn[] buttons) =>
+            ListRow(id, title, caption, lockExtras ? 1 : int.MaxValue, buttons);
+
+        /// <summary>Same row, with buttons from index <paramref name="lockFrom"/> onwards locked.</summary>
+        public int ListRow(string id, string title, string caption, int lockFrom, params Btn[] buttons)
         {
             const float h = 54, bw = 92, gap = 6;
             var r = new Rect(0, Y, Width, h);
             Y += h;
             int clicked = -1;
+            // The hover band goes under the buttons, otherwise it covers them.
+            bool visible = Visible(r);
+            if (visible) RowChrome(id, r, Hover(r));
             float x = r.xMax - buttons.Length * (bw + gap) + gap;
             for (int i = 0; i < buttons.Length; i++)
             {
                 var br = new Rect(x + i * (bw + gap), r.y + 11, bw, 32);
-                if (Button(id + ".b" + i, br, buttons[i], lockExtras && i > 0)) clicked = i;
+                if (Button(id + ".b" + i, br, buttons[i], i >= lockFrom)) clicked = i;
             }
-            if (!Visible(r)) return clicked;
-            RowChrome(id, r, Hover(r));
+            if (!visible) return clicked;
             float tw = r.width - buttons.Length * (bw + gap) - 8;
             Theme.Label(new Rect(r.x + 2, r.y + 8, tw, 20), title, 15, Theme.Receipt, true);
             Theme.Label(new Rect(r.x + 2, r.y + 29, tw, 18), caption, 12, Theme.Mist);

@@ -168,6 +168,13 @@ namespace SupermarketTrainer
             Check("slots missing from the map left alone", !um.storeSpaceUpgrades.Skip(stores).Any(b => b) && !um.storageSpaceUpgrades.Skip(storages).Any(b => b)
                 && !um.addonsBought.Skip(deps).Any(b => b), $"store {stores}/{um.storeSpaceUpgrades.Length}, storage {storages}/{um.storageSpaceUpgrades.Length}, departments {deps}/{um.addonsBought.Length}");
             Check("still connected after buying everything", Mirror.NetworkClient.isConnected && Mirror.NetworkServer.active);
+            // A save bought with 1.1.0 can hold a slot missing from the map: loading it must still open the departments.
+            um.storageSpaceUpgrades[storages + 1] = true;
+            string loadError = null;
+            try { AccessTools.Method(typeof(UpgradesManager), "InitialSpaceSet").Invoke(um, null); }
+            catch (Exception e) { loadError = (e.InnerException ?? e).Message; }
+            Check("save with a missing slot still loads", loadError == null, loadError ?? "");
+            Check("missing slot repaired", Management.RepairMissingSlots() == 1 && !um.storageSpaceUpgrades.Skip(storages).Any(b => b));
             Check("all expansions were free", Mathf.Abs(gd.gameFunds - funds) <= 25f, $"{funds} -> {gd.gameFunds}");
             Game.Teleport(Game.Player.position + Vector3.up * 0.2f);
             yield return Shot("31_expansions");
@@ -264,11 +271,116 @@ namespace SupermarketTrainer
             }
             World.SetWeather(oldWeather);
 
+            // ---- Demolition ----
+            var dem = gd.GetComponent<DemolishableManager>();
+            int groups = Management.DemolishGroups(dem);
+            Check("demolition groups", groups >= 2, groups.ToString());
+            funds = gd.gameFunds;
+            int sentP = Management.DemolishAll(0), sentB = Management.DemolishAll(1);
+            yield return new WaitForSecondsRealtime(1.5f);
+            Management.Demolished(dem, 0, out int pDone, out int pTotal);
+            Management.Demolished(dem, 1, out int bDone, out int bTotal);
+            Check("every pillar demolished", pTotal > 0 && pDone == pTotal, $"{pDone}/{pTotal}, {sentP} sent");
+            Check("every beam demolished", bTotal > 0 && bDone == bTotal, $"{bDone}/{bTotal}, {sentB} sent");
+            Check("demolition was free", Mathf.Abs(gd.gameFunds - funds) <= 25f, $"{funds} -> {gd.gameFunds}");
+            Check("nothing left to demolish", Management.DemolishAll(0) + Management.DemolishAll(1) == 0);
+            int rubble = Management.DebrisLeft();
+            Game.Teleport(Game.Player.position + Vector3.up * 0.2f);
+            yield return Shot("35_demolished");
+            Management.ClearDebris();
+            yield return new WaitForSecondsRealtime(1f);
+            Check("rubble cleared", rubble > 0 && Management.DebrisLeft() == 0, $"{rubble} -> {Management.DebrisLeft()}");
+            yield return new WaitForSecondsRealtime(3.5f);
+            yield return Shot("36_rubble_cleared");
+            Menu.Open();
+            Menu.Select(3, 99999f);
+            yield return Shot("37_management_demolition");
+            Menu.Close();
+
+            // ---- Event tokens ----
+            int types = Tokens.Types;
+            Check("token types", types >= 6, types.ToString());
+            int t0 = Tokens.Owned(0);
+            Tokens.AddToSelf(0, 3);
+            Check("tokens for me", Tokens.Owned(0) == t0 + 3, $"{t0} -> {Tokens.Owned(0)}");
+            int found = 0;
+            for (int i = 0; i < types; i++) if (Tokens.Prefab(i)) found++;
+            Check("token pickups found", found == types, $"{found}/{types}");
+            int t1 = Tokens.Owned(1), gifts = UnityEngine.Object.FindObjectsByType<MisterGift>(FindObjectsSortMode.None).Length;
+            Tokens.Drop(Game.Player, 1, 3);
+            yield return new WaitForSecondsRealtime(0.3f);
+            int dropped = UnityEngine.Object.FindObjectsByType<MisterGift>(FindObjectsSortMode.None).Length - gifts;
+            Check("token pickups dropped", dropped == 3 || Tokens.Owned(1) > t1, $"{dropped} on the floor, owned {t1} -> {Tokens.Owned(1)}");
+            Menu.Open();
+            Menu.Select(6);
+            yield return Shot("34_tokens");
+            Menu.Close();
+            yield return new WaitForSecondsRealtime(3f);
+            var left = UnityEngine.Object.FindObjectsByType<MisterGift>(FindObjectsSortMode.None);
+            _log.LogInfo($"[selftest] tokens after 3 s standing on them: owned {t1} -> {Tokens.Owned(1)}, {left.Length - gifts} still on the floor");
+            if (left.Length > gifts)
+            {
+                var g = left[0];
+                _log.LogInfo($"[selftest] pickup '{g.name}' components: " + string.Join(", ", g.GetComponentsInChildren<Component>(true).Select(c => c.GetType().Name + "@" + c.name)) + $", layer {g.gameObject.layer}, tag {g.tag}");
+                g.GetStarToken();
+                yield return Settle();
+                Check("picking up a token counts it", Tokens.Owned(1) == t1 + 1 + (3 - dropped), $"{t1} -> {Tokens.Owned(1)}");
+            }
+
+            // ---- Moving a player from the host (experiment) ----
+            // Our own robot runs the same movement code as a remote player's game does for theirs.
+            yield return MoveExperiment(gd);
+
             Menu.Open();
             Menu.Select(3);
             yield return Shot("40_management_after");
             Menu.Close();
             Finish();
+        }
+
+        private IEnumerator MoveExperiment(GameData gd)
+        {
+            var me = Game.Player;
+            Vector3 start = me.position, dir = Vector3.zero;
+            for (int a = 0; a < 360 && dir == Vector3.zero; a += 45)
+            {
+                var d = Quaternion.Euler(0f, a, 0f) * Vector3.forward;
+                if (!Physics.Raycast(start + Vector3.up, d, 7f)) dir = d;
+            }
+            _log.LogInfo("[selftest] player components: " + string.Join(", ", me.GetComponents<Component>().Select(c => c.GetType().Name)));
+            if (dir == Vector3.zero) { _log.LogInfo("[selftest] move: no open direction"); yield break; }
+            var target = start + dir * 5f;
+            Func<float> off = () => Vector2.Distance(new Vector2(me.position.x, me.position.z), new Vector2(target.x, target.z));
+
+            Traverse.Create(gd.GetComponent<NetworkSpawner>()).Method("RpcUpdateObjectOnClients", new[] { typeof(GameObject), typeof(Vector3), typeof(Quaternion) })
+                .GetValue(me.gameObject, target, me.rotation);
+            yield return null;
+            float a0 = off();
+            yield return new WaitForSecondsRealtime(1f);
+            _log.LogInfo($"[selftest] move A NetworkSpawner.RpcUpdateObjectOnClients: {a0:0.00} m then {off():0.00} m from target");
+
+            Game.Teleport(start);
+            yield return Settle();
+            var smooth = me.GetComponent<Smooth.SmoothSyncMirror>();
+            if (smooth)
+            {
+                smooth.RpcNonServerOwnedTeleportFromServer(target, me.eulerAngles, me.localScale);
+                yield return null;
+                float b0 = off();
+                yield return new WaitForSecondsRealtime(1f);
+                _log.LogInfo($"[selftest] move B SmoothSync.RpcNonServerOwnedTeleportFromServer: {b0:0.00} m then {off():0.00} m from target, transformSource {smooth.transformSource}");
+            }
+
+            Game.Teleport(start);
+            yield return Settle();
+            // "Bring" asks for the game's push with the command any player may send.
+            var mine = Game.Net.GetComponent<PlayerObjectController>();
+            Players.Push(mine, dir);
+            yield return new WaitForSecondsRealtime(2f);
+            float pushed = Vector3.Distance(start, me.position);
+            Check("bring: one push moves the player", pushed > 3f, $"{pushed:0.00} m");
+            Game.Teleport(start);
+            yield return Settle();
         }
 
         private void Finish()

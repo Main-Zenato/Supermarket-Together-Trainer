@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using HarmonyLib;
 using SupermarketTrainer.UI;
 using UnityEngine;
 
@@ -12,7 +13,7 @@ namespace SupermarketTrainer.Features
         private static readonly List<PlayerObjectController> Cache = new List<PlayerObjectController>();
         private static float _nextRefresh;
 
-        public static void Reset() { PlayerEsp = false; ThiefEsp = false; }
+        public static void Reset() { PlayerEsp = false; ThiefEsp = false; Pulls.Clear(); }
 
         private static List<PlayerObjectController> List()
         {
@@ -27,7 +28,69 @@ namespace SupermarketTrainer.Features
             return Cache;
         }
 
-        private static string NameOf(PlayerObjectController p) =>
+        // ---- Bring a player ----------------------------------------------------------------
+
+        private sealed class Pull
+        {
+            public PlayerObjectController Player;
+            public float Next, Until, LastDistance = float.MaxValue;
+            public int Stuck;
+        }
+
+        private static readonly List<Pull> Pulls = new List<Pull>();
+
+        internal static bool Pulling(PlayerObjectController p) => Pulls.Exists(x => x.Player == p);
+
+        internal static void StopPull(PlayerObjectController p) => Pulls.RemoveAll(x => x.Player == p);
+
+        internal static void StartPull(PlayerObjectController p)
+        {
+            StopPull(p);
+            Pulls.Add(new Pull { Player = p, Until = Time.unscaledTime + 60f });
+        }
+
+        /// <summary>
+        /// Each game moves its own player, so nobody can place anyone else. The debt collector's push
+        /// makes the pushed player's own game walk them 3 m/s for 1.5 s, so we chain pushes towards us.
+        /// Any player may ask for a push, as the game does when someone bumps into another.
+        /// </summary>
+        public static void Tick()
+        {
+            if (Pulls.Count == 0) return;
+            if (!Game.InGame || !Game.Player) { Pulls.Clear(); return; }
+            for (int i = Pulls.Count - 1; i >= 0; i--)
+            {
+                var pull = Pulls[i];
+                var p = pull.Player;
+                if (!p || Time.unscaledTime > pull.Until) { Pulls.RemoveAt(i); continue; }
+                if (Time.time < pull.Next) continue;
+                var to = Game.Player.position - p.transform.position;
+                to.y = 0f;
+                float dist = to.magnitude;
+                if (dist < 2f)
+                {
+                    Pulls.RemoveAt(i);
+                    Toasts.Show(L.T($"{NameOf(p)} est arrivé.", $"{NameOf(p)} is here."));
+                    continue;
+                }
+                pull.Stuck = dist > pull.LastDistance - 0.5f ? pull.Stuck + 1 : 0;
+                if (pull.Stuck >= 2)
+                {
+                    Pulls.RemoveAt(i);
+                    Toasts.Show(L.T($"{NameOf(p)} est bloqué à {dist:0} m. Rapproche-toi en vue de lui et recommence.",
+                        $"{NameOf(p)} is stuck {dist:0} m away. Move where they can see you and try again."));
+                    continue;
+                }
+                pull.LastDistance = dist;
+                Push(p, to / dist);
+                pull.Next = Time.time + 1.6f; // the push lasts 1.5 s of game time; a new one is ignored before
+            }
+        }
+
+        internal static void Push(PlayerObjectController p, Vector3 direction) =>
+            Traverse.Create(p.GetComponent<PlayerNetwork>()).Method("CmdPushPlayer", new[] { typeof(Vector3) }).GetValue(direction);
+
+        internal static string NameOf(PlayerObjectController p) =>
             string.IsNullOrEmpty(p.PlayerName) ? L.T("Joueur ", "Player ") + p.PlayerIdNumber : p.PlayerName;
 
         public static void Draw(Ui ui)
@@ -48,32 +111,41 @@ namespace SupermarketTrainer.Features
                     string caption = me ? L.T("C'est toi", "That's you")
                         : p.ConnectionID == 0 ? L.T($"Hôte, à {dist:0} m", $"Host, {dist:0} m away")
                         : L.T($"À {dist:0} m", $"{dist:0} m away");
+                    if (Pulling(p)) caption += L.T(", arrive vers toi", ", coming to you");
                     if (me)
                     {
                         ui.ListRow("pl." + p.netId, NameOf(p), caption, false);
                         continue;
                     }
-                    int b = ui.ListRow("pl." + p.netId, NameOf(p), caption, !host,
-                        new Btn(L.T("Rejoindre", "Go to"), ButtonKind.Primary), L.T("Prison 30 s", "Jail 30 s"),
-                        new Btn(L.T("Expulser", "Kick"), ButtonKind.Danger));
+                    int b = ui.ListRow("pl." + p.netId, NameOf(p), caption, host ? int.MaxValue : 2,
+                        new Btn(L.T("Rejoindre", "Go to"), ButtonKind.Primary), Pulling(p) ? L.T("Arrêter", "Stop") : L.T("Amener", "Bring"),
+                        L.T("Prison 30 s", "Jail 30 s"), new Btn(L.T("Expulser", "Kick"), ButtonKind.Danger));
                     if (b == 0)
                     {
                         Game.Teleport(p.transform.position + p.transform.forward * 1.2f + Vector3.up * 0.2f);
                         Toasts.Show(L.T($"Téléporté près de {NameOf(p)}.", $"Teleported next to {NameOf(p)}."));
                     }
-                    if (b == 1 && host)
+                    if (b == 1)
+                    {
+                        if (Pulling(p)) { StopPull(p); Toasts.Show(L.T($"{NameOf(p)} n'est plus amené.", $"No longer bringing {NameOf(p)}.")); }
+                        else { StartPull(p); Toasts.Show(L.T($"{NameOf(p)} arrive vers toi.", $"{NameOf(p)} is coming to you.")); }
+                    }
+                    if (b == 2 && host)
                     {
                         p.GetComponent<PlayerPermissions>().JPlayer(30);
                         Toasts.Show(L.T($"{NameOf(p)} part en prison pour 30 secondes.", $"{NameOf(p)} is going to jail for 30 seconds."));
                     }
-                    if (b == 2 && host)
+                    if (b == 3 && host)
                     {
                         if (p.ConnectionID == 0) Toasts.Show(L.T("L'hôte ne peut pas être expulsé.", "The host can't be kicked."));
                         else { p.GetComponent<PlayerPermissions>().KPlayer(); Toasts.Show(L.T($"{NameOf(p)} a été expulsé.", $"{NameOf(p)} was kicked.")); }
                     }
                 }
+                ui.Note(L.T("« Amener » est en test. Il utilise la poussée du jeu : le joueur glisse vers toi à 3 m/s et ne peut pas bouger pendant ce temps. Un mur ou un rayon l'arrête : place-toi en vue de lui.",
+                    "\"Bring\" is being tested. It uses the game's own push: the player slides towards you at 3 m/s and can't move meanwhile. A wall or a shelf stops them, so stand where they can see you."));
                 if (!host) ui.Note(L.T("La prison et l'expulsion sont réservées à l'hôte.", "Jail and kick are host only."));
             }
+            Tokens.Draw(ui, List());
 
             ui.Section(L.T("Vision à travers les murs", "See through walls"));
             PlayerEsp = ui.Toggle("esp.players", L.T("Afficher les joueurs", "Show players"),

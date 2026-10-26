@@ -1,6 +1,9 @@
+using System.Collections.Generic;
 using System.Globalization;
+using System.Reflection;
 using HarmonyLib;
 using SupermarketTrainer.UI;
+using Mirror;
 using UnityEngine;
 
 namespace SupermarketTrainer.Features
@@ -112,6 +115,48 @@ namespace SupermarketTrainer.Features
                 um.addonsDepartmentsParentOBJ.transform.childCount);
         }
 
+        /// <summary>Slots of a group the game can show; a department also opens a door in its own parent.</summary>
+        internal static int Showable(UpgradesManager um, int group, bool[] values)
+        {
+            int n = Slots(um, group, values);
+            return group == 2 && um.addonsDepartmentsParentOBJ ? Mathf.Min(n, um.addonsDepartmentsParentOBJ.transform.childCount) : n;
+        }
+
+        private static GameData _repaired;
+
+        /// <summary>
+        /// Version 1.1.0 could buy slots that are missing from the map. The game stops applying a save's
+        /// expansions at the first such slot, so the departments after it stay closed for everyone.
+        /// The host clears them once per game; nothing changes in the map since they don't exist.
+        /// </summary>
+        internal static int RepairMissingSlots()
+        {
+            var um = Upgrades;
+            if (!um || !NetworkServer.active) return 0;
+            return ClearFrom(um.storeSpaceUpgrades, Showable(um, 0, um.storeSpaceUpgrades), v => um.NetworkstoreSpaceUpgrades = v)
+                + ClearFrom(um.storageSpaceUpgrades, Showable(um, 1, um.storageSpaceUpgrades), v => um.NetworkstorageSpaceUpgrades = v)
+                + ClearFrom(um.addonsBought, Showable(um, 2, um.addonsBought), v => um.NetworkaddonsBought = v);
+        }
+
+        private static int ClearFrom(bool[] values, int from, System.Action<bool[]> set)
+        {
+            if (values == null) return 0;
+            var copy = (bool[])values.Clone();
+            int n = 0;
+            for (int i = from; i < copy.Length; i++) if (copy[i]) { copy[i] = false; n++; }
+            if (n > 0) set(copy);
+            return n;
+        }
+
+        public static void Tick()
+        {
+            if (!NetworkServer.active || !Gd || _repaired == Gd || !Upgrades) return;
+            _repaired = Gd;
+            int n = RepairMissingSlots();
+            if (n > 0) Toasts.Show(L.T($"Sauvegarde réparée : {n} agrandissement(s) qui n'existent pas retiré(s). Les joueurs déjà là doivent revenir pour voir les départements.",
+                $"Save repaired: {n} expansion(s) that don't exist removed. Players already here must rejoin to see the departments."));
+        }
+
         // ---- Perks -------------------------------------------------------------------------
 
         /// <summary>The perk tree as the game lays it out; extra slots in the save array have no UI and no effect.</summary>
@@ -201,6 +246,66 @@ namespace SupermarketTrainer.Features
             return n;
         }
 
+        // ---- Demolition --------------------------------------------------------------------
+
+        private static DemolishableManager Demolish => Gd ? Gd.GetComponent<DemolishableManager>() : null;
+
+        /// <summary>Group 0 holds the pillars and group 1 the beams, as the demolition achievement counts them.</summary>
+        internal static int DemolishGroups(DemolishableManager dm) =>
+            dm && dm.demolishableParentRootOBJ && dm.demolishableValues != null && dm.demolishingCosts != null
+                ? Mathf.Min(dm.demolishableParentRootOBJ.transform.childCount, dm.demolishableValues.Length, dm.demolishingCosts.Length) : 0;
+
+        internal static void Demolished(DemolishableManager dm, int group, out int done, out int total)
+        {
+            var parent = dm.demolishableParentRootOBJ.transform.GetChild(group);
+            total = parent.childCount;
+            done = 0;
+            foreach (Transform t in parent) if (!t.gameObject.activeSelf) done++;
+        }
+
+        /// <summary>
+        /// Demolishes every standing item of a group. The host takes the cost before checking the
+        /// item is still standing, so only standing ones are sent, each with its cost put in the till.
+        /// </summary>
+        internal static int DemolishAll(int group)
+        {
+            var dm = Demolish;
+            if (group >= DemolishGroups(dm)) return 0;
+            var parent = dm.demolishableParentRootOBJ.transform.GetChild(group);
+            string state = dm.demolishableValues[group] ?? "";
+            int n = 0;
+            for (int i = 0; i < parent.childCount; i++)
+            {
+                if (!parent.GetChild(i).gameObject.activeSelf || (i < state.Length && state[i] != '0')) continue;
+                Fund(dm.demolishingCosts[group]);
+                dm.CmdDemolishItem(group, i);
+                n++;
+            }
+            return n;
+        }
+
+        internal static int DebrisLeft()
+        {
+            int n = 0;
+            foreach (var d in Object.FindObjectsByType<DemolishDebrisControl>(FindObjectsSortMode.None))
+                if (d && d.debrisParentOBJ) foreach (Transform t in d.debrisParentOBJ.transform) if (t.gameObject.activeSelf) n++;
+            return n;
+        }
+
+        /// <summary>Clears the rubble left by demolitions, piece by piece as the hammer does. Free in the game too.</summary>
+        internal static int ClearDebris()
+        {
+            int n = 0;
+            foreach (var d in Object.FindObjectsByType<DemolishDebrisControl>(FindObjectsSortMode.None))
+            {
+                if (!d || !d.debrisParentOBJ) continue;
+                var parent = d.debrisParentOBJ.transform;
+                for (int i = 0; i < parent.childCount; i++)
+                    if (parent.GetChild(i).gameObject.activeSelf) { d.CmdRemoveDebris(i); n++; }
+            }
+            return n;
+        }
+
         // ---- UI ----------------------------------------------------------------------------
 
         public static void Draw(Ui ui)
@@ -278,6 +383,35 @@ namespace SupermarketTrainer.Features
             ui.Note(L.T("Règle le prix de vente de tous les produits d'un coup, par rapport au prix du marché. Au-delà de ×2, des clients trouvent le produit trop cher et le reposent.",
                 "Sets the selling price of every product at once, relative to the market price. Above ×2, some customers find it too expensive and leave it on the shelf."));
 
+            var dem = Demolish;
+            int groups = DemolishGroups(dem);
+            if (groups >= 2)
+            {
+                ui.Section(L.T("Démolition  ·  en test", "Demolition  ·  testing"));
+                Demolished(dem, 0, out int pillarsDone, out int pillars);
+                Demolished(dem, 1, out int beamsDone, out int beams);
+                ui.Stat(L.T("Piliers démolis", "Pillars demolished"), $"{pillarsDone} / {pillars}");
+                ui.Stat(L.T("Poutres démolies", "Beams demolished"), $"{beamsDone} / {beams}");
+                int debris = DebrisLeft();
+                ui.Stat(L.T("Gravats au sol", "Rubble on the floor"), debris == 0 ? L.T("aucun", "none") : debris.ToString());
+                int d = ui.Buttons("mg.demolish", false, new Btn(L.T("Démolir les piliers", "Demolish pillars"), ButtonKind.Primary),
+                    L.T("Démolir les poutres", "Demolish beams"), L.T("Enlever les gravats", "Clear the rubble"));
+                if (d == 0 || d == 1)
+                {
+                    int n = DemolishAll(d);
+                    Toasts.Show(n == 0 ? L.T("Tout est déjà démoli.", "Everything is already demolished.")
+                        : L.T($"{n} élément(s) démoli(s) gratuitement. Les gravats tombent dans la seconde.", $"{n} item(s) demolished for free. The rubble lands within a second."));
+                }
+                if (d == 2)
+                {
+                    int n = ClearDebris();
+                    Toasts.Show(n == 0 ? L.T("Il n'y a pas de gravats au sol.", "There's no rubble on the floor.")
+                        : L.T($"{n} morceau(x) de gravats enlevé(s).", $"{n} piece(s) of rubble cleared."));
+                }
+                ui.Note(L.T("Comme au marteau de démolition, sans payer. Les gravats arrivent juste après la démolition : enlève-les ensuite.",
+                    "Like the demolition hammer, without paying. The rubble lands right after the demolition: clear it afterwards."));
+            }
+
             ui.Section(L.T("Enseigne", "Store sign"));
             var spawner = Gd.GetComponent<NetworkSpawner>();
             if (_storeName == null && spawner) _storeName = spawner.SuperMarketName;
@@ -301,6 +435,30 @@ namespace SupermarketTrainer.Features
             }
             ui.Note(L.T("Seules les lettres prises en charge par le jeu s'affichent sur l'enseigne. Les lettres brillent à partir de 19 h.",
                 "Only letters the game supports show up on the sign. The letters light up from 7 PM."));
+        }
+    }
+
+    /// <summary>
+    /// Skips expansion slots that are missing from the map when the game applies a save, instead of
+    /// throwing there and leaving every later expansion and department unapplied.
+    /// </summary>
+    [HarmonyPatch]
+    internal static class MissingSlotPatch
+    {
+        private static IEnumerable<MethodBase> TargetMethods()
+        {
+            yield return AccessTools.Method(typeof(UpgradesManager), "SetSingleStoreSpace");
+            yield return AccessTools.Method(typeof(UpgradesManager), "SetSingleStorageSpace");
+            yield return AccessTools.Method(typeof(UpgradesManager), "SetSingleAddonSpace");
+        }
+
+        private static bool Prefix(UpgradesManager __instance, MethodBase __originalMethod, int spaceIndex,
+            GameObject spaceParentOBJ, GameObject spaceUIParentOBJ, GameObject spaceUIButtonParentOBJ)
+        {
+            int n = Mathf.Min(spaceParentOBJ.transform.childCount, spaceUIParentOBJ.transform.childCount, spaceUIButtonParentOBJ.transform.childCount);
+            if (__originalMethod.Name == "SetSingleAddonSpace" && __instance.addonsDepartmentsParentOBJ)
+                n = Mathf.Min(n, __instance.addonsDepartmentsParentOBJ.transform.childCount);
+            return spaceIndex >= 0 && spaceIndex < n;
         }
     }
 }

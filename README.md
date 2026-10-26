@@ -21,6 +21,9 @@ Made by **Zenato**.
 
 ## Features
 
+Features marked *(testing)* are new in 1.2.0 and haven't been checked in a real game yet. They may
+not work as described: if one misbehaves, open an issue with `BepInEx\LogOutput.log`.
+
 **Player** (works everywhere)
 - Noclip: fly through walls. Jump to rise, crouch to sink, sprint to go faster.
 - Walking speed, jump height and gravity multipliers.
@@ -47,6 +50,10 @@ Made by **Zenato**.
 - Pay every bill and pay off your loan for free.
 - Set every selling price at once: market price, ×1.5 or ×2 (the most customers will pay).
 - Rename the store and change the sign colour *(host)*.
+- *(testing)* Demolish every pillar or every beam for free, then clear the rubble they leave.
+- *(testing)* Repairs saves where version 1.1.0's "Buy everything" bought expansions missing from
+  the map, which kept the departments closed. With the trainer the departments open again; when the
+  host has it, the save itself is fixed for everyone.
 
 **Customers and staff** *(host)*
 - Custom limit on how many customers can be in the store at once.
@@ -62,6 +69,10 @@ Made by **Zenato**.
 
 **Players**
 - List of everyone in the game with their distance, and teleport next to them.
+- *(testing)* Bring a player to you: the game's own push slides them towards you at 3 m/s until they
+  reach you. Works as a client too and for players without the trainer; walls and shelves stop them.
+- *(testing)* Give event tokens to anyone. Yours arrive straight away; other players get real tokens
+  at their feet to pick up *(host)*.
 - Names visible through walls.
 - Jail for 30 seconds and kick *(host)*.
 - Spot thieves through walls *(host)*.
@@ -109,7 +120,7 @@ powershell -ExecutionPolicy Bypass -File install.ps1 -GameDir "D:\SteamLibrary\s
 After starting the game once, open `BepInEx\LogOutput.log` in the game folder. It should contain:
 
 ```
-[Info   :Supermarket Trainer] Supermarket Trainer 1.1.1 by Zenato loaded. Menu key: Insert
+[Info   :Supermarket Trainer] Supermarket Trainer 1.2.0 by Zenato loaded. Menu key: Insert
 ```
 
 ## Usage
@@ -241,10 +252,13 @@ la langue se choisit aussi dans Réglages.
 - **Joueur** : noclip, vitesse, saut, gravité, saut infini, champ de vision.
 - **Téléportation** : au viseur, au point d'apparition, 5 emplacements sauvegardés.
 - **Magasin** : argent, argent infini, franchise, déblocage des gammes, remplissage des rayons, ouverture et fin de journée, cartons gratuits de n'importe quel produit.
-- **Gestion** : agrandissements et départements gratuits, tous les avantages de franchise sans points, factures et prêt payés gratuitement, tous les prix d'un coup (prix du marché, ×1,5 ou ×2), nom et couleur de l'enseigne.
+- **Gestion** : agrandissements et départements gratuits, tous les avantages de franchise sans points, factures et prêt payés gratuitement, tous les prix d'un coup (prix du marché, ×1,5 ou ×2), nom et couleur de l'enseigne, démolition gratuite des piliers et des poutres avec nettoyage des gravats *(en test)*, réparation des sauvegardes abîmées par « Tout acheter » de la 1.1.0 *(en test)*.
 - **Clients et employés** : limite de clients, aucun voleur, employés rapides, encaissement éclair, limite d'embauche, nouveaux candidats sans relance.
 - **Monde** : heure, heure figée, vitesse du temps, météo du jour, aucun déchet, aucune panne.
-- **Joueurs** : liste, téléportation, noms à travers les murs, prison, expulsion, repérage des voleurs.
+- **Joueurs** : liste, téléportation, noms à travers les murs, prison, expulsion, repérage des voleurs, « Amener » un joueur jusqu'à toi *(en test)*, jetons d'événement pour les autres joueurs *(en test, hôte)*.
+
+Les fonctions marquées *en test* sont nouvelles dans la 1.2.0 et n'ont pas encore été vérifiées en
+partie réelle. Si l'une d'elles se comporte mal, ouvre une issue avec `BepInEx\LogOutput.log`.
 - **Balais** : jetons d'événement, boules gachapon gratuites, déblocage de tous les skins de balai.
 
 Les options qui modifient la simulation du magasin sont réservées à l'**hôte** : elles sont
